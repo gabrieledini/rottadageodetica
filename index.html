@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ortodromia e lossodromie</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --carta:#0f1b2a;      /* fondo pannello, blu carta nautica notturna */
+    --inchiostro:#e8e2d3; /* testo */
+    --ortodromia:#5ad1ff; /* geodetica */
+    --lossodromia:#ffb347;/* rotte a angolo costante */
+    --ambra-scuro:#8a5a12;
+    --linea:rgba(232,226,211,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#05090f;color:var(--inchiostro);
+    font:15px/1.4 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+  #map{position:fixed;inset:0;background:#0b2238}
+  .leaflet-control-zoom a{background:var(--carta);color:var(--inchiostro);border-color:var(--linea)}
+  .leaflet-control-attribution{background:rgba(15,27,42,.7)!important;color:#9aa;font-size:10px}
+  .leaflet-control-attribution a{color:#bcd}
+
+  #pannello{position:fixed;left:0;right:0;bottom:0;z-index:1000;
+    background:var(--carta);border-top:1px solid var(--linea);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    max-height:62vh;overflow:auto;box-shadow:0 -6px 30px rgba(0,0,0,.5)}
+  @media(min-width:760px){
+    #pannello{left:14px;right:auto;bottom:14px;width:380px;border:1px solid var(--linea);border-radius:6px;max-height:calc(100vh - 28px)}
+  }
+  h1{font-size:17px;font-weight:normal;margin:0 0 8px;letter-spacing:.02em}
+  h1 small{opacity:.6;font-size:12px;margin-left:6px}
+  .citta{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:center;margin-bottom:6px;position:relative}
+  .citta .lettera{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;background:var(--lossodromia);color:#1a1200;font-weight:bold}
+  .citta input{width:100%;padding:7px 9px;background:#08111c;color:var(--inchiostro);
+    border:1px solid var(--linea);border-radius:4px;font:inherit;font-size:14px}
+  .citta input:focus{outline:2px solid var(--ortodromia);outline-offset:1px}
+  .citta button{padding:7px 10px;background:transparent;color:var(--inchiostro);border:1px solid var(--linea);
+    border-radius:4px;font:inherit;font-size:13px;cursor:pointer}
+  .citta button:hover{background:#1a2b40}
+  .suggerimenti{grid-column:2/4;background:#08111c;border:1px solid var(--linea);border-radius:4px;
+    max-height:160px;overflow:auto;display:none}
+  .suggerimenti div{padding:6px 9px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--linea)}
+  .suggerimenti div:hover{background:#1a2b40}
+  .nota{font-size:12.5px;opacity:.7;margin:4px 0 8px}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+  th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--linea)}
+  th{font-weight:normal;opacity:.65}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  th.num{text-align:right}
+  .leg{display:inline-block;width:18px;height:0;border-top:3px solid;vertical-align:middle;margin-right:6px}
+  .leg.orto{border-top-style:dashed;border-color:var(--ortodromia)}
+  .leg.losso{border-color:var(--lossodromia)}
+  .riassunto{margin-top:8px;font-size:13.5px;line-height:1.55}
+  .riassunto b{font-weight:normal;color:var(--ortodromia)}
+  .riassunto b.l{color:var(--lossodromia)}
+
+  .etichetta-rotta{background:var(--carta);color:var(--lossodromia);border:1px solid var(--ambra-scuro);
+    border-radius:3px;padding:1px 5px;font:12px/1.3 Georgia,serif;white-space:nowrap;
+    font-variant-numeric:tabular-nums;transform:translate(-50%,-50%)}
+  .marker-citta{width:14px;height:14px;border-radius:50%;background:var(--lossodromia);
+    border:2px solid #1a1200;box-shadow:0 0 0 3px rgba(255,179,71,.35)}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Mappamondo Mercatore"></div>
+
+<div id="pannello">
+  <h1>Ortodromia in 3 lossodromie <small>proiezione di Mercatore</small></h1>
+
+  <div class="citta">
+    <span class="lettera">A</span>
+    <input id="inA" placeholder="Città di partenza" autocomplete="off">
+    <button data-cerca="A">Cerca</button>
+    <div class="suggerimenti" id="sugA"></div>
+  </div>
+  <div class="citta">
+    <span class="lettera">B</span>
+    <input id="inB" placeholder="Città di arrivo" autocomplete="off">
+    <button data-cerca="B">Cerca</button>
+    <div class="suggerimenti" id="sugB"></div>
+  </div>
+  <p class="nota" id="nota">Cerca due città oppure tocca la mappa: il primo tocco fissa A, il secondo B, il terzo ricomincia.</p>
+
+  <div id="risultato" hidden>
+    <table>
+      <thead><tr><th>Tratto</th><th class="num">Rotta</th><th class="num">Lunghezza</th></tr></thead>
+      <tbody id="tratti"></tbody>
+    </table>
+    <div class="riassunto" id="riassunto"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+if(typeof L==='undefined') document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+</script>
+<script>
+if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+</script>
+<script>
+(function(){
+  if(typeof L==='undefined'){
+    document.getElementById('nota').textContent='Impossibile caricare Leaflet: controlla la connessione o eventuali blocchi ai CDN.';
+    return;
+  }
+  const R = 6371.0088;
+  const rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
+
+  // ---- mappa (Web Mercator, EPSG:3857) ----
+  const map = L.map('map',{zoomControl:true,minZoom:1,maxZoom:12,worldCopyJump:false})
+    .setView([25,12],2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd'}).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',{
+    subdomains:'abcd',pane:'shadowPane'}).addTo(map);
+
+  const strato = L.layerGroup().addTo(map);
+  const punti = {A:null,B:null}; // {lat,lon,nome}
+  let prossimo = 'A';
+
+  // ---- geometria sferica ----
+  function toVec(p){const φ=rad(p.lat),λ=rad(p.lon);return [Math.cos(φ)*Math.cos(λ),Math.cos(φ)*Math.sin(λ),Math.sin(φ)];}
+  function toLL(v){return {lat:deg(Math.atan2(v[2],Math.hypot(v[0],v[1]))),lon:deg(Math.atan2(v[1],v[0]))};}
+  function ortodromia(a,b,n){ // n+1 punti equispaziati sul cerchio massimo
+    const va=toVec(a),vb=toVec(b);
+    const ω=Math.acos(Math.max(-1,Math.min(1,va[0]*vb[0]+va[1]*vb[1]+va[2]*vb[2])));
+    const out=[];
+    for(let i=0;i<=n;i++){
+      const f=i/n;
+      let p;
+      if(ω<1e-9) p=va;
+      else{const s=Math.sin(ω),k1=Math.sin((1-f)*ω)/s,k2=Math.sin(f*ω)/s;
+        p=[k1*va[0]+k2*vb[0],k1*va[1]+k2*vb[1],k1*va[2]+k2*vb[2]];}
+      out.push(toLL(p));
+    }
+    // srotola le longitudini così la linea non salta all'antimeridiano
+    for(let i=1;i<out.length;i++){
+      while(out[i].lon-out[i-1].lon>180) out[i].lon-=360;
+      while(out[i].lon-out[i-1].lon<-180) out[i].lon+=360;
+    }
+    return {punti:out,dist:ω*R};
+  }
+  // lossodromia tra due punti con longitudini già srotolate
+  function lossodromia(p1,p2){
+    const φ1=rad(p1.lat),φ2=rad(p2.lat),Δφ=φ2-φ1,Δλ=rad(p2.lon-p1.lon);
+    const Δψ=Math.log(Math.tan(Math.PI/4+φ2/2)/Math.tan(Math.PI/4+φ1/2));
+    const q=Math.abs(Δψ)>1e-12?Δφ/Δψ:Math.cos(φ1);
+    const dist=Math.sqrt(Δφ*Δφ+q*q*Δλ*Δλ)*R;
+    const rotta=(deg(Math.atan2(Δλ,Δψ))+360)%360;
+    return {dist,rotta};
+  }
+  const fmtKm=k=>k>=1000?Math.round(k).toLocaleString('it-IT')+' km':k.toFixed(1)+' km';
+  const fmtNm=k=>Math.round(k/1.852).toLocaleString('it-IT')+' M';
+  const fmtRotta=r=>r.toFixed(1).padStart(5,'0')+'°';
+
+  // ---- disegno ----
+  function disegna(){
+    strato.clearLayers();
+    for(const k of ['A','B']){
+      const p=punti[k]; if(!p) continue;
+      L.marker([p.lat,p.lon],{icon:L.divIcon({className:'marker-citta',iconSize:[14,14]}),title:p.nome})
+        .bindTooltip(k+' · '+p.nome,{permanent:false}).addTo(strato);
+    }
+    const ris=document.getElementById('risultato');
+    if(!punti.A||!punti.B){ris.hidden=true;return;}
+
+    const gc=ortodromia(punti.A,punti.B,300);
+    L.polyline(gc.punti.map(p=>[p.lat,p.lon]),{color:'#5ad1ff',weight:2.5,dashArray:'6 6',opacity:.9}).addTo(strato);
+
+    // 3 tratti: waypoint a 0, 1/3, 2/3, 1 della geodetica
+    const wp=[0,100,200,300].map(i=>gc.punti[i]);
+    const tbody=document.getElementById('tratti'); tbody.innerHTML='';
+    let totLosso=0;
+    for(let i=0;i<3;i++){
+      const s=lossodromia(wp[i],wp[i+1]); totLosso+=s.dist;
+      // in Mercatore la lossodromia è una retta: due soli vertici
+      L.polyline([[wp[i].lat,wp[i].lon],[wp[i+1].lat,wp[i+1].lon]],{color:'#ffb347',weight:3.5,opacity:.95}).addTo(strato);
+      if(i>0) L.circleMarker([wp[i].lat,wp[i].lon],{radius:4,color:'#ffb347',fillColor:'#0f1b2a',fillOpacity:1,weight:2}).addTo(strato);
+      // etichetta della rotta al centro del tratto (in coordinate proiettate, così sta sulla retta)
+      const c=map.unproject(map.project([wp[i].lat,wp[i].lon],4).add(map.project([wp[i+1].lat,wp[i+1].lon],4)).divideBy(2),4);
+      L.marker(c,{icon:L.divIcon({className:'',html:'<div class="etichetta-rotta">'+fmtRotta(s.rotta)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${i+1}</td><td class="num">${fmtRotta(s.rotta)}</td><td class="num">${fmtKm(s.dist)}</td>`;
+      tbody.appendChild(tr);
+    }
+    const extra=totLosso-gc.dist;
+    document.getElementById('riassunto').innerHTML=
+      `<span class="leg orto"></span>Ortodromia <b>${fmtKm(gc.dist)}</b> (${fmtNm(gc.dist)})<br>`+
+      `<span class="leg losso"></span>Tre lossodromie <b class="l">${fmtKm(totLosso)}</b> (${fmtNm(totLosso)})<br>`+
+      `Allungamento: ${fmtKm(extra)} (+${(100*extra/gc.dist).toFixed(2)}%)`;
+    ris.hidden=false;
+    map.fitBounds(L.latLngBounds(gc.punti.map(p=>[p.lat,p.lon])),{padding:[30,30]});
+  }
+
+  function imposta(k,lat,lon,nome){
+    punti[k]={lat,lon,nome};
+    document.getElementById('in'+k).value=nome;
+    disegna();
+  }
+
+  // ---- selezione dalla mappa ----
+  map.on('click',e=>{
+    let lon=e.latlng.lng; lon=((lon+540)%360)-180;
+    const lat=e.latlng.lat;
+    if(prossimo==='A'){punti.B=null;document.getElementById('inB').value='';}
+    imposta(prossimo,lat,lon,lat.toFixed(2)+', '+lon.toFixed(2));
+    prossimo=prossimo==='A'?'B':'A';
+  });
+
+  // ---- ricerca città (Nominatim) ----
+  async function cerca(k){
+    const q=document.getElementById('in'+k).value.trim(); if(!q) return;
+    const box=document.getElementById('sug'+k);
+    box.style.display='block'; box.innerHTML='<div>Ricerca…</div>';
+    try{
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=it&q='+encodeURIComponent(q);
+      const r=await fetch(url,{headers:{'Accept':'application/json'}});
+      const dati=await r.json();
+      if(!dati.length){box.innerHTML='<div>Nessun risultato. Prova con il nome e il paese.</div>';return;}
+      box.innerHTML='';
+      dati.forEach(d=>{
+        const el=document.createElement('div');
+        el.textContent=d.display_name;
+        el.onclick=()=>{
+          box.style.display='none';
+          const nome=d.display_name.split(',')[0];
+          imposta(k,+d.lat,+d.lon,nome);
+          prossimo=k==='A'?'B':'A';
+        };
+        box.appendChild(el);
+      });
+    }catch(err){box.innerHTML='<div>Ricerca non riuscita: controlla la connessione.</div>';}
+  }
+  document.querySelectorAll('button[data-cerca]').forEach(b=>b.onclick=()=>cerca(b.dataset.cerca));
+  ['A','B'].forEach(k=>{
+    document.getElementById('in'+k).addEventListener('keydown',e=>{if(e.key==='Enter')cerca(k);});
+  });
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.citta')) document.querySelectorAll('.suggerimenti').forEach(s=>s.style.display='none');
+  });
+})();
+</script>
+</body>
+</html>
