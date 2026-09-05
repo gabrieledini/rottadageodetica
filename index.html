@@ -45,6 +45,15 @@
   .suggerimenti div{padding:6px 9px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--linea)}
   .suggerimenti div:hover{background:#1a2b40}
   .nota{font-size:12.5px;opacity:.7;margin:4px 0 8px}
+  .virate{display:flex;align-items:center;gap:10px;margin:2px 0 6px;font-size:13.5px}
+  .virate .nota{margin:0}
+  .scelte{display:inline-flex;border:1px solid var(--linea);border-radius:4px;overflow:hidden}
+  .scelte button{padding:5px 12px;background:transparent;color:var(--inchiostro);border:0;
+    border-right:1px solid var(--linea);font:inherit;font-size:14px;cursor:pointer;
+    font-variant-numeric:tabular-nums}
+  .scelte button:last-child{border-right:0}
+  .scelte button[aria-pressed="true"]{background:var(--lossodromia);color:#1a1200}
+  .scelte button:focus-visible{outline:2px solid var(--ortodromia);outline-offset:-2px}
 
   table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
   th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--linea)}
@@ -85,6 +94,17 @@
   </div>
   <p class="nota" id="nota">Cerca due città oppure tocca la mappa: il primo tocco fissa A, il secondo B, il terzo ricomincia.</p>
 
+  <div class="virate">
+    <span>Virate</span>
+    <div class="scelte" id="virate" role="radiogroup" aria-label="Numero di virate">
+      <button data-v="0" aria-pressed="false">0</button>
+      <button data-v="1" aria-pressed="false">1</button>
+      <button data-v="2" aria-pressed="true">2</button>
+      <button data-v="3" aria-pressed="false">3</button>
+    </div>
+    <span class="nota" id="nSegmenti">3 lossodromie</span>
+  </div>
+
   <div id="risultato" hidden>
     <table>
       <thead><tr><th>Tratto</th><th class="num">Rotta</th><th class="num">Lunghezza</th></tr></thead>
@@ -121,6 +141,14 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
   const strato = L.layerGroup().addTo(map);
   const punti = {A:null,B:null}; // {lat,lon,nome}
   let prossimo = 'A';
+  let virate = 2; // 0..3 → 1..4 lossodromie
+
+  document.querySelectorAll('#virate button').forEach(b=>b.onclick=()=>{
+    virate=Math.min(3,Math.max(0,+b.dataset.v));
+    document.querySelectorAll('#virate button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    document.getElementById('nSegmenti').textContent=(virate+1)+(virate===0?' lossodromia':' lossodromie');
+    disegna();
+  });
 
   // ---- geometria sferica ----
   function toVec(p){const φ=rad(p.lat),λ=rad(p.lon);return [Math.cos(φ)*Math.cos(λ),Math.cos(φ)*Math.sin(λ),Math.sin(φ)];}
@@ -171,11 +199,12 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
     const gc=ortodromia(punti.A,punti.B,300);
     L.polyline(gc.punti.map(p=>[p.lat,p.lon]),{color:'#5ad1ff',weight:2.5,dashArray:'6 6',opacity:.9}).addTo(strato);
 
-    // 3 tratti: waypoint a 0, 1/3, 2/3, 1 della geodetica
-    const wp=[0,100,200,300].map(i=>gc.punti[i]);
+    // virate+1 tratti: waypoint equispaziati lungo la geodetica
+    const nSeg=virate+1, passo=300/nSeg;
+    const wp=[]; for(let i=0;i<=nSeg;i++) wp.push(gc.punti[Math.round(i*passo)]);
     const tbody=document.getElementById('tratti'); tbody.innerHTML='';
     let totLosso=0;
-    for(let i=0;i<3;i++){
+    for(let i=0;i<nSeg;i++){
       const s=lossodromia(wp[i],wp[i+1]); totLosso+=s.dist;
       // in Mercatore la lossodromia è una retta: due soli vertici
       L.polyline([[wp[i].lat,wp[i].lon],[wp[i+1].lat,wp[i+1].lon]],{color:'#ffb347',weight:3.5,opacity:.95}).addTo(strato);
@@ -188,10 +217,11 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
       tbody.appendChild(tr);
     }
     const extra=totLosso-gc.dist;
+    const nome=nSeg===1?'Una lossodromia':(['','','Due','Tre','Quattro'][nSeg]+' lossodromie');
     document.getElementById('riassunto').innerHTML=
       `<span class="leg orto"></span>Ortodromia <b>${fmtKm(gc.dist)}</b> (${fmtNm(gc.dist)})<br>`+
-      `<span class="leg losso"></span>Tre lossodromie <b class="l">${fmtKm(totLosso)}</b> (${fmtNm(totLosso)})<br>`+
-      `Allungamento: ${fmtKm(extra)} (+${(100*extra/gc.dist).toFixed(2)}%)`;
+      `<span class="leg losso"></span>${nome} <b class="l">${fmtKm(totLosso)}</b> (${fmtNm(totLosso)})<br>`+
+      `Differenza: <b class="l">${extra.toFixed(1)} km</b> in più (+${(100*extra/gc.dist).toFixed(2)}%)`;
     ris.hidden=false;
     map.fitBounds(L.latLngBounds(gc.punti.map(p=>[p.lat,p.lon])),{padding:[30,30]});
   }
