@@ -83,6 +83,14 @@
   .etichetta-rotta{background:#fff;color:var(--lossodromia);border:1.5px solid var(--lossodromia);
     border-radius:999px;padding:2px 8px;font:600 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
     white-space:nowrap;font-variant-numeric:tabular-nums;position:absolute;left:0;top:0;transform:translate(-50%,-50%);box-shadow:0 2px 6px rgba(15,23,42,.2)}
+  .etichetta-orto{background:#fff;color:var(--ortodromia);border:1.5px solid var(--ortodromia);
+    border-radius:999px;padding:2px 8px;font:600 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    white-space:nowrap;font-variant-numeric:tabular-nums;position:absolute;left:0;top:0;transform:translate(-50%,-50%);box-shadow:0 2px 6px rgba(15,23,42,.2)}
+  .etichetta-angolo{background:var(--testo);color:#fff;border-radius:6px;padding:2px 7px;
+    font:600 11.5px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    white-space:nowrap;font-variant-numeric:tabular-nums;position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 10px));
+    box-shadow:0 2px 6px rgba(15,23,42,.25)}
+  .etichetta-angolo::after{content:"";position:absolute;left:50%;bottom:-5px;margin-left:-5px;border:5px solid transparent;border-top-color:var(--testo);border-bottom:0}
   .marker-citta{width:16px;height:16px;border-radius:50%;background:var(--lossodromia);
     border:3px solid #fff;box-shadow:0 0 0 2px var(--lossodromia),0 2px 6px rgba(15,23,42,.3)}
 </style>
@@ -124,10 +132,6 @@
   </div>
 
   <div id="risultato" hidden>
-    <table>
-      <thead><tr><th>Tratto</th><th class="num">Rotta</th><th class="num">Lunghezza</th></tr></thead>
-      <tbody id="tratti"></tbody>
-    </table>
     <div class="riassunto" id="riassunto"></div>
   </div>
 </div>
@@ -214,11 +218,12 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
 
     const gc=ortodromia(punti.A,punti.B,300);
     L.polyline(gc.punti.map(p=>[p.lat,p.lon]),{color:'#2563eb',weight:3,dashArray:'7 7',opacity:.95}).addTo(strato);
+    const m=gc.punti[150];
+    L.marker([m.lat,m.lon],{icon:L.divIcon({className:'',html:'<div class="etichetta-orto">'+fmtKm(gc.dist)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
 
     // virate+1 tratti: waypoint equispaziati lungo la geodetica
     const nSeg=virate+1, passo=300/nSeg;
     const wp=[]; for(let i=0;i<=nSeg;i++) wp.push(gc.punti[Math.round(i*passo)]);
-    const tbody=document.getElementById('tratti'); tbody.innerHTML='';
     let totLosso=0;
     for(let i=0;i<nSeg;i++){
       const s=lossodromia(wp[i],wp[i+1]); totLosso+=s.dist;
@@ -228,9 +233,8 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
       // etichetta della rotta al centro del tratto (in coordinate proiettate, così sta sulla retta)
       const c=map.unproject(map.project([wp[i].lat,wp[i].lon],4).add(map.project([wp[i+1].lat,wp[i+1].lon],4)).divideBy(2),4);
       L.marker(c,{icon:L.divIcon({className:'',html:'<div class="etichetta-rotta">'+fmtKm(s.dist)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${i+1}</td><td class="num">${fmtRotta(s.rotta)}</td><td class="num">${fmtKm(s.dist)}</td>`;
-      tbody.appendChild(tr);
+      // angolo di rotta nel punto di partenza e a ogni virata
+      L.marker([wp[i].lat,wp[i].lon],{icon:L.divIcon({className:'',html:'<div class="etichetta-angolo">'+fmtRotta(s.rotta)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
     }
     const extra=totLosso-gc.dist;
     const nome=nSeg===1?'Una lossodromia':(['','','Due','Tre','Quattro'][nSeg]+' lossodromie');
