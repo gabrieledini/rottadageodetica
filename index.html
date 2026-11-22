@@ -28,7 +28,7 @@
   #pannello{position:fixed;left:0;right:0;bottom:0;z-index:1000;
     background:rgba(255,255,255,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
     border-radius:20px 20px 0 0;box-shadow:var(--ombra);
-    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    padding:14px 16px calc(64px + env(safe-area-inset-bottom));
     max-height:62vh;overflow:auto}
   #pannello::before{content:"";display:block;width:40px;height:4px;border-radius:2px;background:#cbd5e1;margin:-4px auto 10px}
   @media(min-width:760px){
@@ -53,6 +53,13 @@
   .suggerimenti div:last-child{border-bottom:0}
   .suggerimenti div:hover{background:var(--campo)}
   .nota{font-size:13px;color:var(--muto);margin:4px 0 10px}
+  .toggle{display:flex;align-items:center;justify-content:space-between;width:100%;margin:0 0 8px;
+    padding:8px 12px;background:var(--campo);border:0;border-radius:10px;font:inherit;font-size:13.5px;
+    font-weight:600;color:var(--testo);cursor:pointer}
+  .toggle .chev{transition:transform .25s}
+  .toggle[aria-expanded="false"] .chev{transform:rotate(180deg)}
+  #parametri{overflow:hidden;max-height:600px;transition:max-height .3s ease,opacity .25s}
+  #parametri.chiuso{max-height:0;opacity:0}
   .virate{display:flex;align-items:center;gap:12px;margin:2px 0 8px;font-size:14px;font-weight:600}
   .virate .nota{margin:0;font-weight:500}
   .scelte{display:inline-flex;background:var(--campo);border-radius:10px;padding:3px;gap:3px}
@@ -75,7 +82,7 @@
 
   .etichetta-rotta{background:#fff;color:var(--lossodromia);border:1.5px solid var(--lossodromia);
     border-radius:999px;padding:2px 8px;font:600 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
-    white-space:nowrap;font-variant-numeric:tabular-nums;transform:translate(-50%,-50%);box-shadow:0 2px 6px rgba(15,23,42,.2)}
+    white-space:nowrap;font-variant-numeric:tabular-nums;position:absolute;left:0;top:0;transform:translate(-50%,-50%);box-shadow:0 2px 6px rgba(15,23,42,.2)}
   .marker-citta{width:16px;height:16px;border-radius:50%;background:var(--lossodromia);
     border:3px solid #fff;box-shadow:0 0 0 2px var(--lossodromia),0 2px 6px rgba(15,23,42,.3)}
 </style>
@@ -84,8 +91,12 @@
 <div id="map" role="application" aria-label="Mappamondo Mercatore"></div>
 
 <div id="pannello">
-  <h1>Ortodromia in 3 lossodromie <small>proiezione di Mercatore</small></h1>
+  <h1>Ortodromia e lossodromie <small>proiezione di Mercatore</small></h1>
 
+  <button id="toggle" class="toggle" hidden aria-expanded="true">
+    <span id="toggleTesto">Nascondi città</span><span class="chev">▾</span>
+  </button>
+  <div id="parametri">
   <div class="citta">
     <span class="lettera">A</span>
     <input id="inA" placeholder="Città di partenza" autocomplete="off">
@@ -99,6 +110,7 @@
     <div class="suggerimenti" id="sugB"></div>
   </div>
   <p class="nota" id="nota">Cerca due città oppure tocca la mappa: il primo tocco fissa A, il secondo B, il terzo ricomincia.</p>
+  </div>
 
   <div class="virate">
     <span>Virate</span>
@@ -215,7 +227,7 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
       if(i>0) L.circleMarker([wp[i].lat,wp[i].lon],{radius:5,color:'#ea580c',fillColor:'#fff',fillOpacity:1,weight:2.5}).addTo(strato);
       // etichetta della rotta al centro del tratto (in coordinate proiettate, così sta sulla retta)
       const c=map.unproject(map.project([wp[i].lat,wp[i].lon],4).add(map.project([wp[i+1].lat,wp[i+1].lon],4)).divideBy(2),4);
-      L.marker(c,{icon:L.divIcon({className:'',html:'<div class="etichetta-rotta">'+fmtRotta(s.rotta)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
+      L.marker(c,{icon:L.divIcon({className:'',html:'<div class="etichetta-rotta">'+fmtKm(s.dist)+'</div>',iconSize:[0,0]}),interactive:false}).addTo(strato);
       const tr=document.createElement('tr');
       tr.innerHTML=`<td>${i+1}</td><td class="num">${fmtRotta(s.rotta)}</td><td class="num">${fmtKm(s.dist)}</td>`;
       tbody.appendChild(tr);
@@ -227,8 +239,21 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
       `<span class="leg losso"></span>${nome} <b class="l">${fmtKm(totLosso)}</b> (${fmtNm(totLosso)})<br>`+
       `Differenza: <b class="l">${extra.toFixed(1)} km</b> in più (+${(100*extra/gc.dist).toFixed(2)}%)`;
     ris.hidden=false;
+    // ritira la sezione città una volta tracciata la rotta
+    document.getElementById('toggle').hidden=false;
+    apriParametri(false);
     map.fitBounds(L.latLngBounds(gc.punti.map(p=>[p.lat,p.lon])),{padding:[30,30]});
   }
+
+  function apriParametri(aperto){
+    document.getElementById('parametri').classList.toggle('chiuso',!aperto);
+    const t=document.getElementById('toggle');
+    t.setAttribute('aria-expanded',aperto);
+    document.getElementById('toggleTesto').textContent=aperto?'Nascondi città':
+      (punti.A&&punti.B?punti.A.nome+' → '+punti.B.nome:'Mostra città');
+  }
+  document.getElementById('toggle').onclick=()=>apriParametri(
+    document.getElementById('toggle').getAttribute('aria-expanded')!=='true');
 
   function imposta(k,lat,lon,nome){
     punti[k]={lat,lon,nome};
@@ -240,7 +265,7 @@ if(typeof L==='undefined') document.write('<script src="https://unpkg.com/leafle
   map.on('click',e=>{
     let lon=e.latlng.lng; lon=((lon+540)%360)-180;
     const lat=e.latlng.lat;
-    if(prossimo==='A'){punti.B=null;document.getElementById('inB').value='';}
+    if(prossimo==='A'){punti.B=null;document.getElementById('inB').value='';apriParametri(true);}
     imposta(prossimo,lat,lon,lat.toFixed(2)+', '+lon.toFixed(2));
     prossimo=prossimo==='A'?'B':'A';
   });
